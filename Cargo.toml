@@ -1,0 +1,11 @@
+[package]
+name = "serial_tool"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ratatui = "0.27.0"
+indoc = "2.0.5"
+strum = "0.26"
+tokio = { version = "1", features = ["full"] }
+tokio-serial = "5.4.1"

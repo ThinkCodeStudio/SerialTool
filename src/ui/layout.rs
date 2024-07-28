@@ -1,9 +1,7 @@
-
-
 use ratatui::{
     backend::Backend,
-    crossterm::event::{self, Event, KeyCode, KeyEventKind},
-    layout::{Constraint, Layout},
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    layout::{Constraint, Layout, Rect},
     text::Line,
     widgets::{Paragraph, Tabs},
     Frame, Terminal,
@@ -11,14 +9,18 @@ use ratatui::{
 use strum::IntoEnumIterator;
 
 use strum::{Display, EnumIter, FromRepr};
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio_serial::SerialStream;
 
 use crate::ui::{Mode, Page};
 
-use super::{
-    rxtx::RxTxWidget,
-    MyWidget,
-};
+use super::rxtx::RxTxWidget;
+
+pub trait MyWidget {
+    fn event(&mut self, key: &KeyEvent);
+    fn input(&mut self, key: &KeyEvent, serial: &mut SerialStream);
+    fn build(&self, area: Rect, f: &mut Frame, mode: &Mode);
+    fn state_list(&self) -> Vec<String>;
+}
 
 #[derive(Default, Clone, Copy, Display, FromRepr, EnumIter)]
 pub enum SelectedTab {
@@ -80,23 +82,22 @@ impl Default for MainLayout {
 impl MainLayout {
     pub fn run<B: Backend>(
         &mut self,
-        tx: Sender<Vec<u8>>,
         terminal: &mut Terminal<B>,
-        rx:&mut Receiver<Vec<u8>>
+        serial: &mut SerialStream,
     ) -> Page {
         loop {
-            self.draw(terminal, rx);
-            if let Some(page) = self.event(&tx) {
+            self.draw(terminal, serial);
+            if let Some(page) = self.event(serial) {
                 return page;
             }
         }
     }
 
-    fn draw<B: Backend>(&self, terminal: &mut Terminal<B>, rx:&mut Receiver<Vec<u8>>) {
-        terminal.draw(|f| self.build(f, rx)).unwrap();
+    fn draw<B: Backend>(&self, terminal: &mut Terminal<B>, serial: &mut SerialStream) {
+        terminal.draw(|f| self.build(f, serial)).unwrap();
     }
 
-    fn event(&mut self, tx: &Sender<Vec<u8>>) -> Option<Page> {
+    fn event(&mut self, serial: &mut SerialStream) -> Option<Page> {
         if let Ok(Event::Key(key)) = event::read() {
             if key.kind == KeyEventKind::Press {
                 match self.mode {
@@ -115,7 +116,7 @@ impl MainLayout {
                     },
                     Mode::Input => match key.code {
                         KeyCode::Esc => self.mode = Mode::Command,
-                        _ => self.widget.input(tx, &key),
+                        _ => self.widget.input(&key, serial),
                     },
                 }
             }
@@ -123,7 +124,15 @@ impl MainLayout {
         None
     }
 
-    fn build(&self, f: &mut Frame, rx:&mut Receiver<Vec<u8>>) {
+    fn read(&self, serial: &mut SerialStream) -> Option<Vec<u8>> {
+        let mut read_buf = vec![0; 4096];
+        if let Ok(size) = serial.try_read(read_buf.as_mut_slice()) {
+            return Some(read_buf[..size].to_vec());
+        }
+        return None;
+    }
+
+    fn build(&self, f: &mut Frame, serial: &mut SerialStream) {
         let layout = Layout::vertical([
             Constraint::Length(1),
             Constraint::Fill(1),
@@ -168,7 +177,7 @@ impl MainLayout {
             Paragraph::new("[i] input mode | [q] exit app | [Esc] back"),
             text_area,
         );
-        self.widget.build(layout[1], f, &self.mode, rx);
+        self.widget.build(layout[1], f, &self.mode);
         for (i, v) in state_tabs.iter().enumerate() {
             f.render_widget(Paragraph::new(v.clone()), state_layout[i]);
         }

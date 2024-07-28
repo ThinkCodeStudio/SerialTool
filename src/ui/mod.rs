@@ -4,7 +4,7 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 use index::IndexPage;
 use layout::MainLayout;
 use ratatui::{backend::Backend, crossterm::event::KeyEvent, layout::Rect, Frame, Terminal};
-use tokio_serial::{DataBits, FlowControl, Parity, SerialPortBuilderExt, StopBits};
+use tokio_serial::{DataBits, FlowControl, Parity, SerialPortBuilderExt, SerialStream, StopBits};
 
 pub enum Mode {
     Command,
@@ -21,13 +21,6 @@ pub enum Page {
 pub mod index;
 pub mod layout;
 pub mod rxtx;
-
-pub trait MyWidget {
-    fn event(&mut self,key: &KeyEvent);
-    fn input(&mut self, tx: &Sender<Vec<u8>>, key: &KeyEvent);
-    fn build(&self, area: Rect, f: &mut Frame, mode:&Mode, rx:&mut Receiver<Vec<u8>>);
-    fn state_list(&self) -> Vec<String>;
-}
 
 pub struct AppContext{
     path:String,
@@ -71,21 +64,7 @@ impl AppContext {
                     .open_native_async()
                     .expect(format!("open {} failed!", self.path).as_str());
 
-                    let (rx_sender, mut rx_receive) = mpsc::channel::<Vec<u8>>(1024);
-                    let (tx_sender, mut tx_receive) = mpsc::channel::<Vec<u8>>(1024);
-                    tokio::spawn(async move {
-                        let mut buff = vec![0;4096];
-                        loop{
-                            if let Ok(size) = serial.try_read(buff.as_mut_slice()){   
-                                rx_sender.send(buff[..size].to_vec());
-                            }
-                            if let Some(data) = tx_receive.recv().await{   
-                                serial.try_write(data.as_slice());
-                            }
-                        }
-                    });
-
-                    self.page = MainLayout::default().run(tx_sender, terminal, &mut rx_receive)
+                    self.page = MainLayout::default().run(terminal,&mut serial)
                 },
                 Page::Exit => {
                     return Ok(());

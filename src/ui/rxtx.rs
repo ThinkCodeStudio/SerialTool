@@ -1,3 +1,7 @@
+
+
+use core::str;
+
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Layout, Rect},
@@ -5,13 +9,12 @@ use ratatui::{
     widgets::{List, ListItem, Paragraph},
     Frame,
 };
-use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_serial::SerialStream;
 
 use crate::ui::Mode;
 use crate::common::input::Input;
 
-use super::MyWidget;
+use super::layout::MyWidget;
 
 pub struct RxTxWidget {
     receive_buf: Vec<String>,
@@ -31,11 +34,6 @@ impl RxTxWidget {
             enter_end:false,
         }
     }
-
-    fn submit_message(&mut self) {
-        self.receive_buf.push(self.input.get_string().clone());
-        self.input.reset_cursor();
-    }
 }
 
 impl MyWidget for RxTxWidget {
@@ -48,24 +46,32 @@ impl MyWidget for RxTxWidget {
         }
     }
 
-    fn input(&mut self, tx: &Sender<Vec<u8>>, key: &KeyEvent) {
+    fn input(&mut self, key: &KeyEvent, serial:&mut SerialStream) {
+        let mut read_buf = vec![0;4096]; 
+        if let Ok(size) = serial.try_read(read_buf.as_mut_slice()){
+            if let Ok(str) = str::from_utf8(&read_buf[..size].to_vec())  {
+                self.receive_buf.push(str.to_string())
+            }
+        }
+
+
         match key.code {
             KeyCode::Char(c) => self.input.enter_char(c),
             KeyCode::Backspace => self.input.delete_char(),
             KeyCode::Left => self.input.move_cursor_left(),
             KeyCode::Right => self.input.move_cursor_right(),
-            KeyCode::Enter => self.submit_message(),
+            KeyCode::Enter => {
+                serial.try_write(self.input.get_string().as_bytes()).unwrap();
+                self.input.reset_cursor();
+            },
             _ => {}
         }
     }
 
-    fn build(&self, area: Rect, f: &mut Frame, mode: &Mode, rx:&mut Receiver<Vec<u8>>) {
+    fn build(&self, area: Rect, f: &mut Frame, mode: &Mode) {
+
         let [text_area, send_area] =
             Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(area);
-
-        if let Some(data) = rx.recv().await{
-
-        }
 
         let list = self
             .receive_buf

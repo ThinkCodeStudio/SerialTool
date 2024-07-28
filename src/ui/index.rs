@@ -11,8 +11,8 @@ use ratatui::{
     widgets::Paragraph,
     Frame, Terminal,
 };
-use tokio_serial::{DataBits, FlowControl, Parity, SerialPortInfo, StopBits};
 use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
+use tokio_serial::{DataBits, FlowControl, Parity, SerialPortInfo, StopBits};
 
 use crate::ui::{AppContext, Page};
 
@@ -140,11 +140,22 @@ impl IndexPage {
     }
 
     fn down(&mut self) {
-        self.position = self.position.next();
+        if self.select {
+            self.index += 1;
+        } else {
+            self.position = self.position.next();
+        }
     }
 
     fn up(&mut self) {
-        self.position = self.position.previous();
+        if self.select{
+            if self.index != 0{
+                self.index -= 1;
+            }
+        }
+        else{
+            self.position = self.position.previous();
+        }
     }
 
     pub fn run<B: Backend>(

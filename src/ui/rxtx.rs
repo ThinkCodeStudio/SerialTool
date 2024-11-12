@@ -87,9 +87,9 @@ impl MyWidget for RxTxWidget {
 
     fn state_list(&self) -> Vec<String> {
         return vec![
-            format!("[{0}]Hex Mode", if self.hex_mode { "x" } else { " " }),
-            format!("[{0}]QA Mode", if self.qa_mode { "x" } else { " " }),
-            format!("[{0}]\\r\\n End", if self.qa_mode { "x" } else { " " }),
+            format!("[{0}]Hex Mode(h)", if self.hex_mode { "x" } else { " " }),
+            format!("[{0}]QA Mode(a)", if self.qa_mode { "x" } else { " " }),
+            format!("[{0}]\\r\\n End(n)", if self.enter_end { "x" } else { " " }),
         ];
     }
 }

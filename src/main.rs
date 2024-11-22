@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
     // create app and run it
-    let res = AppContext::new().run_app(&mut terminal);
+    let res = AppContext::new().run_app(&mut terminal).await;
 
     // restore terminal
     disable_raw_mode()?;

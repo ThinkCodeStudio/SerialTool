@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
     // create app and run it
-    let res = AppContext::new().run_app(&mut terminal).await;
+    let res = AppContext::new().run_app(&mut terminal);
 
     // restore terminal
     disable_raw_mode()?;
@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     terminal.show_cursor()?;
 
     if let Err(err) = res {
-        println!("{err:?}");
+        println!("{}", err);
     }
 
     Ok(())

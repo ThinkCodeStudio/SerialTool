@@ -1,37 +1,48 @@
-
-use core::str;
+use std::sync::Arc;
 
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
-    layout::{Constraint, Layout, Rect},
+    layout::{Constraint, Layout, Position, Rect},
     text::Line,
     widgets::{List, ListItem, Paragraph},
     Frame,
 };
-use tokio_serial::SerialStream;
+use serialport::SerialPort;
+use tokio::sync::Mutex;
 
-use crate::ui::Mode;
 use crate::common::input::Input;
+use crate::ui::Mode;
 
 use super::layout::MyWidget;
 
 pub struct RxTxWidget {
     receive_buf: Vec<String>,
-    input:Input,
+    input: Input,
     hex_mode: bool,
     qa_mode: bool,
-    enter_end:bool,
+    enter_end: bool,
+    serila: Arc<Mutex<Box<dyn SerialPort>>>
 }
 
 impl RxTxWidget {
-    pub const fn new() -> Self {
+    pub const fn new(serial: Arc<Mutex<Box<dyn SerialPort>>>) -> Self {
         Self {
             receive_buf: vec![],
             input: Input::new(),
             hex_mode: false,
             qa_mode: false,
-            enter_end:false,
+            enter_end: false,
+            serila: serial,
         }
+    }
+
+    fn serial_send(&self, serial: Arc<Mutex<Box<dyn SerialPort>>>, data: Vec<u8>) {
+        tokio::spawn(async move {
+            let mut serial = serial.lock().await;
+            serial
+                .write_all(&data)
+                .expect("Failed to write to serial port");
+        });
     }
 }
 
@@ -45,30 +56,39 @@ impl MyWidget for RxTxWidget {
         }
     }
 
-    fn input(&mut self, key: &KeyEvent, serial:&mut SerialStream) {
-        let mut read_buf = vec![0;4096]; 
-        if let Ok(size) = serial.try_read(read_buf.as_mut_slice()){
-            if let Ok(str) = str::from_utf8(&read_buf[..size].to_vec())  {
-                self.receive_buf.push(str.to_string())
-            }
-        }
-
-
+    fn input(&mut self, key: &KeyEvent) {
         match key.code {
-            KeyCode::Char(c) => self.input.enter_char(c),
+            KeyCode::Char(c) => {
+                if self.qa_mode{   
+                    self.input.enter_char(c)
+                }
+                else{
+                    self.serial_send(Arc::clone(&self.serila), vec![c as u8]);
+                }
+            },
             KeyCode::Backspace => self.input.delete_char(),
             KeyCode::Left => self.input.move_cursor_left(),
             KeyCode::Right => self.input.move_cursor_right(),
             KeyCode::Enter => {
-                serial.try_write(self.input.get_string().as_bytes()).unwrap();
-                self.input.reset_cursor();
-            },
+                let enter_end = b"\r\n";
+                if self.qa_mode {
+                    let mut data = self.input.get_string().as_bytes().to_vec();
+                    self.receive_buf.push(self.input.get_string().clone());
+                    if self.enter_end {
+                        data.extend_from_slice(enter_end);
+                    }
+                    self.serial_send(Arc::clone(&self.serila), data);
+                    self.input.reset_cursor();
+                }
+                else{
+                    self.serial_send(Arc::clone(&self.serila), enter_end.to_vec());
+                }
+            }
             _ => {}
         }
     }
 
     fn build(&self, area: Rect, f: &mut Frame, mode: &Mode) {
-
         let [text_area, send_area] =
             Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(area);
 
@@ -79,9 +99,15 @@ impl MyWidget for RxTxWidget {
         f.render_widget(List::new(list), text_area);
         match mode {
             Mode::Command => {}
-            Mode::Input => f.set_cursor(send_area.x + self.input.get_index() as u16 + 1, send_area.y),
+            Mode::Input => f.set_cursor_position(Position::new(
+                send_area.x + self.input.get_index() as u16 + 1,
+                send_area.y,
+            )),
         }
-        f.render_widget(Paragraph::new(format!(">{}", self.input.get_string())), send_area);
+        f.render_widget(
+            Paragraph::new(format!(">{}", self.input.get_string())),
+            send_area,
+        );
     }
 
     fn state_list(&self) -> Vec<String> {

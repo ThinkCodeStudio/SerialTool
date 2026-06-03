@@ -1,18 +1,15 @@
 use indoc::indoc;
 use ratatui::{
     backend::Backend,
-    crossterm::{
-        event::{self, Event, KeyCode, KeyEventKind},
-        style::Color,
-    },
+    crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::{Constraint, Layout},
-    style::Stylize,
+    style::{Color, Stylize},
     text::Line,
     widgets::Paragraph,
     Frame, Terminal,
 };
+use serialport::{DataBits, FlowControl, Parity, SerialPortInfo, StopBits};
 use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
-use tokio_serial::{DataBits, FlowControl, Parity, SerialPortInfo, StopBits};
 
 use crate::ui::{AppContext, Page};
 
@@ -148,12 +145,11 @@ impl IndexPage {
     }
 
     fn up(&mut self) {
-        if self.select{
-            if self.index != 0{
+        if self.select {
+            if self.index != 0 {
                 self.index -= 1;
             }
-        }
-        else{
+        } else {
             self.position = self.position.previous();
         }
     }
@@ -294,7 +290,7 @@ impl IndexPage {
             Constraint::Percentage(90),
             // Constraint::Percentage(60),
         ])
-        .split(f.size());
+        .split(f.area());
         let menu_layout =
             Layout::horizontal([Constraint::Percentage(33), Constraint::Percentage(67)])
                 .split(layout[1]);

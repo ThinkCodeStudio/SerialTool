@@ -7,21 +7,16 @@ use ratatui::{
     Frame, Terminal,
 };
 use serialport::SerialPort;
-use std::sync::{atomic::AtomicBool, Arc};
+use std::{
+    sync::{atomic::AtomicBool, Arc},
+    time::Duration,
+};
 use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
 use tokio::sync::Mutex;
 
-use crate::ui::{Mode, Page};
+use crate::ui::{Mode, Page, UiWidget};
 
 use super::rxtx::RxTxWidget;
-
-pub trait MyWidget {
-    fn event(&mut self, key: &KeyEvent);
-    fn input(&mut self, key: &KeyEvent);
-    // fn receive(&mut self, data: Vec<u8>);
-    fn build(&self, area: Rect, f: &mut Frame, mode: &Mode);
-    fn state_list(&self) -> Vec<String>;
-}
 
 #[derive(Default, Clone, Copy, Display, FromRepr, EnumIter)]
 pub enum SelectedTab {
@@ -64,46 +59,43 @@ pub struct MainLayout {
     receive_count: usize,
     selected_tab: SelectedTab,
     mode: Mode,
-
-    widget: Box<dyn MyWidget>,
+    layout: Box<dyn LayoutWidget>,
+    serial: Arc<Mutex<Box<dyn SerialPort>>>,
 }
 
 impl MainLayout {
-    pub fn new(serial: Arc<Mutex<Box<dyn SerialPort>>>) -> Self {
-        Self {
-            send_count: Default::default(),
-            receive_count: Default::default(),
-            selected_tab: Default::default(),
-            mode: Mode::Command,
-            widget: Box::new(RxTxWidget::new(serial)),
-        }
-    }
-}
-
-impl MainLayout {
-    pub fn run<B: Backend>(
-        &mut self,
-        terminal: &mut Terminal<B>,
-    ) -> Page {
-        loop {
-            self.draw(terminal);
-            if let Some(page) = self.event() {
-                return page;
+    pub fn new(serial_info: crate::ui::SerialInfo) -> Result<Self, String> {
+        match serialport::new(serial_info.path.clone(), serial_info.baud_rate)
+            .data_bits(serial_info.data_bits)
+            .stop_bits(serial_info.stop_bits)
+            .parity(serial_info.parity)
+            .flow_control(serial_info.flow_control)
+            .timeout(Duration::from_micros(1))
+            .open()
+        {
+            Ok(serial) => Ok(Self {
+                send_count: Default::default(),
+                receive_count: Default::default(),
+                selected_tab: Default::default(),
+                mode: Mode::Command,
+                serial: Arc::new(Mutex::new(serial)),
+                layout: todo!(),
+            }),
+            Err(err) => {
+                return Err(format!(
+                    "Failed to open serial port: {}, error: {}", serial_info.path, err
+                ));
             }
         }
     }
+}
 
-    fn draw<B: Backend>(&self, terminal: &mut Terminal<B>) {
-        terminal.draw(|f| self.build(f)).unwrap();
-    }
+impl UiWidget for MainLayout {
 
-    fn event(&mut self) -> Option<Page> {
-        if let Ok(Event::Key(key)) = event::read() {
-            if key.kind == KeyEventKind::Press {
+    fn event(&mut self, key: &KeyEvent) {
+        if key.kind == KeyEventKind::Press {
                 match self.mode {
                     Mode::Command => match key.code {
-                        KeyCode::Esc => return Some(Page::Index),
-                        KeyCode::Char('q') => return Some(Page::Exit),
                         KeyCode::Char('t') => self.selected_tab = SelectedTab::TxRx,
                         KeyCode::Char('l') => self.selected_tab = SelectedTab::Command,
                         KeyCode::Char('s') => self.selected_tab = SelectedTab::Stream,
@@ -120,11 +112,9 @@ impl MainLayout {
                     },
                 }
             }
-        }
-        None
     }
 
-    fn build(&self, f: &mut Frame) {
+    fn build(&self, f: &mut Frame, area: Rect) {
         let layout = Layout::vertical([
             Constraint::Length(1),
             Constraint::Fill(1),
@@ -173,5 +163,12 @@ impl MainLayout {
         for (i, v) in state_tabs.iter().enumerate() {
             f.render_widget(Paragraph::new(v.clone()), state_layout[i]);
         }
+    }
+    
+}
+
+impl PageWidget for MainLayout {
+        fn receive(&mut self, data: Vec<u8>) {
+        self.receive_count += data.len();
     }
 }

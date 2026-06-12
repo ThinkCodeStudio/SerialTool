@@ -1,17 +1,18 @@
+use std::ops::Index;
+
 use indoc::indoc;
 use ratatui::{
-    backend::Backend,
-    crossterm::event::{self, Event, KeyCode, KeyEventKind},
+    crossterm::event::{self, KeyCode, KeyEventKind},
     layout::{Constraint, Layout},
     style::{Color, Stylize},
     text::Line,
     widgets::Paragraph,
-    Frame, Terminal,
+    Frame,
 };
 use serialport::{DataBits, FlowControl, Parity, SerialPortInfo, StopBits};
 use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
 
-use crate::ui::{AppContext, Page};
+use crate::ui::{SerialInfo, UiWidget};
 
 #[derive(PartialEq, Clone, Copy, Display, FromRepr, EnumIter)]
 enum Menu {
@@ -83,17 +84,27 @@ pub struct IndexPage {
     position: Menu,
     select: bool,
     index: usize,
+    serial_info: SerialInfo,
     port_list: Vec<SerialPortInfo>,
 }
 
 impl IndexPage {
-    pub const fn new(info: Vec<SerialPortInfo>) -> Self {
+    pub fn new(info: Vec<SerialPortInfo>) -> Self {
+        let mut serial_info = SerialInfo::default();
+        if info.len() > 1{
+            serial_info.path = info[0].port_name.clone();
+        }
         return Self {
             position: Menu::SerialPort,
             select: false,
             index: 0,
             port_list: info,
+            serial_info: serial_info,
         };
+    }
+
+    pub fn get_serial_info(&self) -> SerialInfo {
+        self.serial_info.clone()
     }
 
     fn title(&self, position: Menu, value: &String) -> String {
@@ -153,138 +164,117 @@ impl IndexPage {
             self.position = self.position.previous();
         }
     }
+}
 
-    pub fn run<B: Backend>(
-        &mut self,
-        context: &mut AppContext,
-        terminal: &mut Terminal<B>,
-    ) -> Page {
-        context.path = self.port_list[0].port_name.clone();
-        loop {
-            self.draw(context, terminal);
-            if let Some(p) = self.event(context) {
-                return p;
-            }
-        }
-    }
-
-    fn draw<B: Backend>(&self, context: &AppContext, terminal: &mut Terminal<B>) {
-        terminal.draw(|f| self.build(context, f)).unwrap();
-    }
-
-    fn event(&mut self, context: &mut AppContext) -> Option<Page> {
-        if let Ok(Event::Key(key)) = event::read() {
-            if key.kind == KeyEventKind::Press {
-                match key.code {
-                    KeyCode::Enter => return Some(Page::Main),
-                    KeyCode::Char('q') => return Some(Page::Exit),
-                    KeyCode::Down => self.down(),
-                    KeyCode::Up => self.up(),
-                    KeyCode::Char('0') => {
-                        if self.select {
-                            self.add_number(0)
-                        }
+impl UiWidget for IndexPage {
+    fn event(&mut self, key: &event::KeyEvent) {
+        if key.kind == KeyEventKind::Press {
+            match key.code {
+                KeyCode::Down => self.down(),
+                KeyCode::Up => self.up(),
+                KeyCode::Char('0') => {
+                    if self.select {
+                        self.add_number(0)
                     }
-                    KeyCode::Char('1') => {
-                        if self.select {
-                            self.add_number(1)
-                        }
-                    }
-                    KeyCode::Char('2') => {
-                        if self.select {
-                            self.add_number(2)
-                        }
-                    }
-                    KeyCode::Char('3') => {
-                        if self.select {
-                            self.add_number(3)
-                        }
-                    }
-                    KeyCode::Char('4') => {
-                        if self.select {
-                            self.add_number(4)
-                        }
-                    }
-                    KeyCode::Char('5') => {
-                        if self.select {
-                            self.add_number(5)
-                        }
-                    }
-                    KeyCode::Char('6') => {
-                        if self.select {
-                            self.add_number(6)
-                        }
-                    }
-                    KeyCode::Char('7') => {
-                        if self.select {
-                            self.add_number(7)
-                        }
-                    }
-                    KeyCode::Char('8') => {
-                        if self.select {
-                            self.add_number(8)
-                        }
-                    }
-                    KeyCode::Char('9') => {
-                        if self.select {
-                            self.add_number(9)
-                        }
-                    }
-                    KeyCode::Backspace => {
-                        if self.select {
-                            self.delete_number()
-                        }
-                    }
-                    KeyCode::Right => self.select = true,
-                    KeyCode::Left => {
-                        self.select = false;
-                        match self.position {
-                            Menu::SerialPort => {
-                                if self.index < self.port_list.len() {
-                                    context.path = self.port_list[self.index].port_name.clone()
-                                }
-                            }
-
-                            Menu::BaudRate => {
-                                if self.index < BAUD_RATE.len() {
-                                    context.baud_rate = BAUD_RATE[self.index]
-                                }
-                            }
-
-                            Menu::DataBits => {
-                                if self.index < DATA_BITS.len() {
-                                    context.data_bits = DATA_BITS[self.index]
-                                }
-                            }
-
-                            Menu::StopBits => {
-                                if self.index < STOP_BITS.len() {
-                                    context.stop_bits = STOP_BITS[self.index]
-                                }
-                            }
-
-                            Menu::Parity => {
-                                if self.index < PARITY.len() {
-                                    context.parity = PARITY[self.index]
-                                }
-                            }
-
-                            Menu::FlowConntrol => {
-                                if self.index < FLOW.len() {
-                                    context.flow_control = FLOW[self.index]
-                                }
-                            }
-                        }
-                        self.index = 0;
-                    }
-                    _ => {}
                 }
+                KeyCode::Char('1') => {
+                    if self.select {
+                        self.add_number(1)
+                    }
+                }
+                KeyCode::Char('2') => {
+                    if self.select {
+                        self.add_number(2)
+                    }
+                }
+                KeyCode::Char('3') => {
+                    if self.select {
+                        self.add_number(3)
+                    }
+                }
+                KeyCode::Char('4') => {
+                    if self.select {
+                        self.add_number(4)
+                    }
+                }
+                KeyCode::Char('5') => {
+                    if self.select {
+                        self.add_number(5)
+                    }
+                }
+                KeyCode::Char('6') => {
+                    if self.select {
+                        self.add_number(6)
+                    }
+                }
+                KeyCode::Char('7') => {
+                    if self.select {
+                        self.add_number(7)
+                    }
+                }
+                KeyCode::Char('8') => {
+                    if self.select {
+                        self.add_number(8)
+                    }
+                }
+                KeyCode::Char('9') => {
+                    if self.select {
+                        self.add_number(9)
+                    }
+                }
+                KeyCode::Backspace => {
+                    if self.select {
+                        self.delete_number()
+                    }
+                }
+                KeyCode::Right => self.select = true,
+                KeyCode::Left => {
+                    self.select = false;
+                    match self.position {
+                        Menu::SerialPort => {
+                            if self.index < self.port_list.len() {
+                                self.serial_info.path = self.port_list[self.index].port_name.clone()
+                            }
+                        }
+
+                        Menu::BaudRate => {
+                            if self.index < BAUD_RATE.len() {
+                                self.serial_info.baud_rate = BAUD_RATE[self.index]
+                            }
+                        }
+
+                        Menu::DataBits => {
+                            if self.index < DATA_BITS.len() {
+                                self.serial_info.data_bits = DATA_BITS[self.index]
+                            }
+                        }
+
+                        Menu::StopBits => {
+                            if self.index < STOP_BITS.len() {
+                                self.serial_info.stop_bits = STOP_BITS[self.index]
+                            }
+                        }
+
+                        Menu::Parity => {
+                            if self.index < PARITY.len() {
+                                self.serial_info.parity = PARITY[self.index]
+                            }
+                        }
+
+                        Menu::FlowConntrol => {
+                            if self.index < FLOW.len() {
+                                self.serial_info.flow_control = FLOW[self.index]
+                            }
+                        }
+                    }
+                    self.index = 0;
+                }
+                _ => {}
             }
         }
-        None
     }
 
-    fn build(&self, context: &AppContext, f: &mut Frame) {
+    fn build(&self, f: &mut Frame, area: ratatui::prelude::Rect) {
         let layout = Layout::vertical([
             Constraint::Percentage(10),
             Constraint::Percentage(90),
@@ -315,7 +305,7 @@ impl IndexPage {
         for menu in Menu::iter() {
             match menu {
                 Menu::SerialPort => {
-                    line_list.push(Line::from(self.title(menu, &context.path)));
+                    line_list.push(Line::from(self.title(menu, &self.serial_info.path)));
                     if self.position == menu && self.select {
                         for (i, v) in self.port_list.iter().enumerate() {
                             self.add_item(&mut line_list, i, &v.port_name)
@@ -323,7 +313,9 @@ impl IndexPage {
                     }
                 }
                 Menu::BaudRate => {
-                    line_list.push(Line::from(self.title(menu, &context.baud_rate.to_string())));
+                    line_list.push(Line::from(
+                        self.title(menu, &self.serial_info.baud_rate.to_string()),
+                    ));
                     if self.position == menu && self.select {
                         for (i, v) in BAUD_RATE.iter().enumerate() {
                             self.add_item(&mut line_list, i, &v.to_string())
@@ -331,7 +323,9 @@ impl IndexPage {
                     }
                 }
                 Menu::DataBits => {
-                    line_list.push(Line::from(self.title(menu, &context.data_bits.to_string())));
+                    line_list.push(Line::from(
+                        self.title(menu, &self.serial_info.data_bits.to_string()),
+                    ));
                     if self.position == menu && self.select {
                         for (i, v) in DATA_BITS.iter().enumerate() {
                             self.add_item(&mut line_list, i, &v.to_string())
@@ -339,7 +333,9 @@ impl IndexPage {
                     }
                 }
                 Menu::StopBits => {
-                    line_list.push(Line::from(self.title(menu, &context.stop_bits.to_string())));
+                    line_list.push(Line::from(
+                        self.title(menu, &self.serial_info.stop_bits.to_string()),
+                    ));
                     if self.position == menu && self.select {
                         for (i, v) in STOP_BITS.iter().enumerate() {
                             self.add_item(&mut line_list, i, &v.to_string())
@@ -347,7 +343,9 @@ impl IndexPage {
                     }
                 }
                 Menu::Parity => {
-                    line_list.push(Line::from(self.title(menu, &context.parity.to_string())));
+                    line_list.push(Line::from(
+                        self.title(menu, &self.serial_info.parity.to_string()),
+                    ));
                     if self.position == menu && self.select {
                         for (i, v) in PARITY.iter().enumerate() {
                             self.add_item(&mut line_list, i, &v.to_string())
@@ -356,7 +354,7 @@ impl IndexPage {
                 }
                 Menu::FlowConntrol => {
                     line_list.push(Line::from(
-                        self.title(menu, &context.flow_control.to_string()),
+                        self.title(menu, &self.serial_info.flow_control.to_string()),
                     ));
                     if self.position == menu && self.select {
                         for (i, v) in FLOW.iter().enumerate() {

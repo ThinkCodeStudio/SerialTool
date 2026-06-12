@@ -6,14 +6,11 @@ use ratatui::{
         execute,
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     },
-    prelude::*
+    prelude::*,
 };
-use ui::AppContext;
 
-mod ui;
 mod common;
-
-
+mod ui;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -25,7 +22,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
     // create app and run it
-    let res = AppContext::new().run_app(&mut terminal);
+    // let res = AppContext::new().run_app(&mut terminal);
 
     // restore terminal
     disable_raw_mode()?;
@@ -36,9 +33,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )?;
     terminal.show_cursor()?;
 
-    if let Err(err) = res {
-        println!("{}", err);
-    }
+    // if let Err(err) = res {
+    //     println!("{}", err);
+    // }
 
     Ok(())
 }
